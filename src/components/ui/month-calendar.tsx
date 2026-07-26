@@ -26,6 +26,7 @@ type MonthCalendarProps = {
 };
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DAY_SIZE = 36;
 
 export const MonthCalendar = ({
   value,
@@ -102,23 +103,26 @@ export const MonthCalendar = ({
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected, disabled }}
               accessibilityLabel={format(day, "MMMM d, yyyy")}
-              style={[
-                styles.dayCell,
-                isSelected && styles.daySelected,
-                isToday && !isSelected && styles.dayToday,
-                disabled && styles.dayDisabled,
-              ]}
+              style={[styles.dayCell, disabled && styles.dayDisabled]}
             >
-              <Text
+              <View
                 style={[
-                  styles.dayText,
-                  !inMonth && styles.dayOutside,
-                  isSelected && styles.dayTextSelected,
-                  disabled && styles.dayTextDisabled,
+                  styles.dayBubble,
+                  isSelected && styles.daySelected,
+                  isToday && !isSelected && styles.dayToday,
                 ]}
               >
-                {format(day, "d")}
-              </Text>
+                <Text
+                  style={[
+                    styles.dayText,
+                    !inMonth && styles.dayOutside,
+                    isSelected && styles.dayTextSelected,
+                    disabled && styles.dayTextDisabled,
+                  ]}
+                >
+                  {format(day, "d")}
+                </Text>
+              </View>
             </Pressable>
           );
         })}
@@ -148,6 +152,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: Brand.inkSoft,
     lineHeight: 26,
+    textAlign: "center",
   },
   monthLabel: {
     fontSize: 16,
@@ -170,15 +175,22 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: "14.2857%",
-    aspectRatio: 1,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Radii.full,
-  },  daySelected: {
+  },
+  dayBubble: {
+    width: DAY_SIZE,
+    height: DAY_SIZE,
+    borderRadius: DAY_SIZE / 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  daySelected: {
     backgroundColor: Brand.primary,
   },
   dayToday: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Brand.secondary,
   },
   dayDisabled: {
@@ -188,6 +200,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: Brand.ink,
+    textAlign: "center",
+    lineHeight: 16,
+    includeFontPadding: false,
   },
   dayOutside: {
     color: Brand.muted,

@@ -1,8 +1,10 @@
-import { format } from "date-fns";
+import { format, startOfDay, subDays } from "date-fns";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  Pressable,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,10 +13,16 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/app-button";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Brand, Radii, Spacing } from "@/constants/theme";
 import { useCreateAttendanceRequestMutation } from "@/store/apis/attendance-request.api";
 import type { AttendanceRequestType } from "@/types/attendance-request";
-import { formatStatusLabel } from "@/utils/format-minutes";
+
+import { RequestTypePicker } from "./request-type-picker";
+import {
+  hasCreateRequestErrors,
+  validateCreateRequest,
+} from "./validate-create-request";
 
 const TYPES: AttendanceRequestType[] = [
   "MISSING_CHECKIN",
@@ -28,143 +36,199 @@ export const CreateRequestScreen = () => {
   const [create, { isLoading }] = useCreateAttendanceRequestMutation();
   const [requestType, setRequestType] =
     useState<AttendanceRequestType>("MISSING_CHECKOUT");
-  const [attendanceDate, setAttendanceDate] = useState(
-    format(new Date(), "yyyy-MM-dd"),
+  const [attendanceDate, setAttendanceDate] = useState(() =>
+    startOfDay(new Date()),
   );
   const [reason, setReason] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const values = useMemo(
+    () => ({
+      requestType,
+      attendanceDate,
+      reason,
+    }),
+    [attendanceDate, reason, requestType],
+  );
+
+  const errors = useMemo(() => validateCreateRequest(values), [values]);
+  const showErrors = touched;
 
   const handleSubmit = async () => {
-    if (!reason.trim()) {
+    setTouched(true);
+    setSubmitError(null);
+    const nextErrors = validateCreateRequest(values);
+    if (hasCreateRequestErrors(nextErrors) || !requestType) {
       return;
     }
-    await create({
-      attendanceDate,
-      requestType,
-      reason: reason.trim(),
-    }).unwrap();
-    router.back();
+
+    try {
+      await create({
+        attendanceDate: format(attendanceDate, "yyyy-MM-dd"),
+        requestType,
+        reason: reason.trim(),
+      }).unwrap();
+      router.back();
+    } catch {
+      setSubmitError("Couldn’t submit your request. Try again.");
+      Alert.alert("Request failed", "Please try again in a moment.");
+    }
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Text style={styles.title}>New attendance request</Text>
-      <Text style={styles.subtitle}>
-        Explain the correction you need for a past day.
-      </Text>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.hero}>
+          <Text style={styles.title}>New request</Text>
+          <Text style={styles.subtitle}>
+            Correct a missing punch or wrong attendance day.
+          </Text>
+        </View>
 
-      <Text style={styles.label}>Type</Text>
-      <View style={styles.types}>
-        {TYPES.map((type) => {
-          const active = requestType === type;
-          return (
-            <Pressable
-              key={type}
-              onPress={() => setRequestType(type)}
-              style={[styles.typeChip, active && styles.typeChipActive]}
-            >
-              <Text style={[styles.typeText, active && styles.typeTextActive]}>
-                {formatStatusLabel(type)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+        <View style={styles.card}>
+          <RequestTypePicker
+            types={TYPES}
+            value={requestType}
+            onChange={setRequestType}
+            error={showErrors ? errors.requestType : undefined}
+          />
+        </View>
 
-      <Text style={styles.label}>Attendance date (YYYY-MM-DD)</Text>
-      <TextInput
-        value={attendanceDate}
-        onChangeText={setAttendanceDate}
-        style={styles.input}
-        autoCapitalize="none"
-        accessibilityLabel="Attendance date"
-      />
+        <View style={styles.card}>
+          <DatePickerField
+            label="Attendance date"
+            value={attendanceDate}
+            onChange={(date) => setAttendanceDate(startOfDay(date))}
+            minimumDate={subDays(startOfDay(new Date()), 60)}
+            maximumDate={startOfDay(new Date())}
+            error={showErrors ? errors.attendanceDate : undefined}
+          />
+        </View>
 
-      <Text style={styles.label}>Reason</Text>
-      <TextInput
-        value={reason}
-        onChangeText={setReason}
-        style={[styles.input, styles.textarea]}
-        multiline
-        placeholder="What happened?"
-        placeholderTextColor={Brand.muted}
-        accessibilityLabel="Reason"
-      />
+        <View style={styles.card}>
+          <View style={styles.reasonHeader}>
+            <Text style={styles.label}>Reason</Text>
+            <Text style={styles.counter}>{reason.trim().length}/280</Text>
+          </View>
+          <TextInput
+            value={reason}
+            onChangeText={setReason}
+            style={[
+              styles.input,
+              styles.textarea,
+              showErrors && errors.reason ? styles.inputError : null,
+            ]}
+            multiline
+            maxLength={280}
+            placeholder="What happened?"
+            placeholderTextColor={Brand.muted}
+            accessibilityLabel="Reason"
+          />
+          {showErrors && errors.reason ? (
+            <Text style={styles.error}>{errors.reason}</Text>
+          ) : null}
+        </View>
 
-      <AppButton
-        label={isLoading ? "Submitting…" : "Submit request"}
-        disabled={isLoading || !reason.trim()}
-        onPress={() => void handleSubmit()}
-        style={styles.submit}
-      />
-      <AppButton label="Cancel" variant="ghost" onPress={() => router.back()} />
-    </ScrollView>
+        {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
+
+        <AppButton
+          label={isLoading ? "Submitting…" : "Submit request"}
+          disabled={isLoading}
+          onPress={() => void handleSubmit()}
+        />
+        <AppButton
+          label="Cancel"
+          variant="ghost"
+          onPress={() => router.back()}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.canvas },
+  flex: {
+    flex: 1,
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: Brand.canvas,
+  },
   content: {
-    padding: Spacing.five,
-    gap: Spacing.two,
+    padding: Spacing.four,
+    gap: Spacing.four,
     paddingBottom: Spacing.seven,
   },
+  hero: {
+    gap: 4,
+  },
   title: {
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "700",
     color: Brand.ink,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: Brand.muted,
-    marginBottom: Spacing.three,
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  card: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Spacing.five,
+    gap: Spacing.two,
+  },
+  reasonHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.one,
   },
   label: {
     fontSize: 12,
     fontWeight: "700",
     color: Brand.inkSoft,
-    marginTop: Spacing.three,
   },
-  types: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.two,
-  },
-  typeChip: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.full,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.surface,
-  },
-  typeChipActive: {
-    backgroundColor: Brand.primaryMuted,
-    borderColor: Brand.primary,
-  },
-  typeText: {
-    fontSize: 12,
+  counter: {
+    fontSize: 11,
     fontWeight: "600",
     color: Brand.muted,
   },
-  typeTextActive: { color: Brand.ink },
   input: {
     minHeight: 48,
     borderRadius: Radii.md,
     borderWidth: 1,
     borderColor: Brand.border,
     paddingHorizontal: Spacing.four,
-    backgroundColor: Brand.surface,
+    backgroundColor: Brand.canvas,
     color: Brand.ink,
     fontSize: 15,
   },
+  inputError: {
+    borderColor: Brand.danger,
+  },
   textarea: {
-    minHeight: 110,
+    minHeight: 120,
     paddingTop: Spacing.three,
     textAlignVertical: "top",
   },
-  submit: { marginTop: Spacing.five },
+  error: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Brand.danger,
+    marginTop: Spacing.one,
+  },
 });

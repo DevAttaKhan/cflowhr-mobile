@@ -3,20 +3,20 @@ import { StyleSheet, Text, View } from "react-native";
 import { HeaderActionButton } from "@/components/ui/header-action-button";
 import { Brand, Spacing } from "@/constants/theme";
 
-type LeaveHeaderProps = {
-  onRequest: () => void;
+type RequestsHeaderProps = {
+  onCreate: () => void;
 };
 
-export const LeaveHeader = ({ onRequest }: LeaveHeaderProps) => (
+export const RequestsHeader = ({ onCreate }: RequestsHeaderProps) => (
   <View style={styles.row}>
     <View style={styles.copy}>
-      <Text style={styles.title}>Leave</Text>
-      <Text style={styles.sub}>Balances and requests</Text>
+      <Text style={styles.title}>Requests</Text>
+      <Text style={styles.sub}>Attendance corrections</Text>
     </View>
     <HeaderActionButton
-      label="Request"
-      accessibilityLabel="Request leave"
-      onPress={onRequest}
+      label="New"
+      accessibilityLabel="New attendance request"
+      onPress={onCreate}
     />
   </View>
 );
