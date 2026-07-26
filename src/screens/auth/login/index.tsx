@@ -1,155 +1,127 @@
-import { format } from "date-fns";
 import { router } from "expo-router";
+import { useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  View,
 } from "react-native";
 
-import { AppButton } from "@/components/ui/app-button";
 import { Screen } from "@/components/ui/screen";
-import { Brand, Radii, Spacing } from "@/constants/theme";
+import { Brand, Spacing } from "@/constants/theme";
 import { MOCK_USER } from "@/data/mocks/employee";
 import { loginMock } from "@/store/slices/auth.slice";
 import { useAppDispatch } from "@/store/store";
 
+import { LoginFormCard } from "./login-form-card";
+import { LoginHero } from "./login-hero";
+
+type LoginErrors = {
+  email?: string;
+  password?: string;
+};
+
+const validateLogin = (email: string, password: string): LoginErrors => {
+  const errors: LoginErrors = {};
+  const trimmedEmail = email.trim();
+
+  if (!trimmedEmail) {
+    errors.email = "Email is required";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    errors.email = "Enter a valid email address";
+  }
+
+  if (!password) {
+    errors.password = "Password is required";
+  } else if (password.length < 4) {
+    errors.password = "Password must be at least 4 characters";
+  }
+
+  return errors;
+};
+
 export const LoginScreen = () => {
   const dispatch = useAppDispatch();
+  const [email, setEmail] = useState(MOCK_USER.email);
+  const [password, setPassword] = useState("demo1234");
+  const [touched, setTouched] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const errors = validateLogin(email, password);
+  const showErrors = touched;
 
   const handleContinue = () => {
-    dispatch(loginMock(MOCK_USER));
-    router.replace("/(employee)/today");
+    setTouched(true);
+    const nextErrors = validateLogin(email, password);
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    // Mock auth delay for a clearer sign-in moment.
+    setTimeout(() => {
+      dispatch(
+        loginMock({
+          ...MOCK_USER,
+          email: email.trim().toLowerCase(),
+        }),
+      );
+      router.replace("/(employee)/today");
+      setIsSubmitting(false);
+    }, 450);
   };
 
   return (
-    <Screen style={styles.screen}>
+    <Screen style={styles.screen} edges={["top", "left", "right", "bottom"]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.flex}
       >
-        <View style={styles.hero}>
-          <View style={styles.logoMark}>
-            <Text style={styles.logoText}>cf</Text>
-          </View>
-          <Text style={styles.brand}>cflowHR</Text>
-          <Text style={styles.tagline}>Your workday, beautifully simple.</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Welcome back</Text>
-          <Text style={styles.cardSub}>
-            {format(new Date(), "EEEE, MMM d")} · Demo employee session
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <LoginHero />
+          <LoginFormCard
+            email={email}
+            password={password}
+            isSubmitting={isSubmitting}
+            emailError={showErrors ? errors.email : undefined}
+            passwordError={showErrors ? errors.password : undefined}
+            onEmailChange={setEmail}
+            onPasswordChange={setPassword}
+            onSubmit={handleContinue}
+          />
+          <Text style={styles.footer}>
+            By continuing you agree to use this demo for product exploration.
           </Text>
-
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            value={MOCK_USER.email}
-            editable={false}
-            style={styles.input}
-            accessibilityLabel="Email"
-          />
-
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            value="••••••••"
-            editable={false}
-            secureTextEntry
-            style={styles.input}
-            accessibilityLabel="Password"
-          />
-
-          <AppButton
-            label="Continue to app"
-            onPress={handleContinue}
-            style={styles.cta}
-          />
-          <Text style={styles.hint}>Mock login — API wiring comes next.</Text>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  screen: {
-    justifyContent: "space-between",
-    paddingBottom: Spacing.six,
-  },
-  hero: {
+  flex: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.three,
   },
-  logoMark: {
-    width: 84,
-    height: 84,
-    borderRadius: Radii.xl,
-    backgroundColor: Brand.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: Spacing.two,
+  screen: {
+    paddingHorizontal: 0,
   },
-  logoText: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: Brand.ink,
-  },
-  brand: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: Brand.ink,
-    letterSpacing: -0.8,
-  },
-  tagline: {
-    fontSize: 15,
-    color: Brand.muted,
-  },
-  card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radii.xl,
-    padding: Spacing.five,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    gap: Spacing.two,
-  },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: Brand.ink,
-  },
-  cardSub: {
-    fontSize: 13,
-    color: Brand.muted,
-    marginBottom: Spacing.three,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Brand.inkSoft,
-    marginTop: Spacing.two,
-  },
-  input: {
-    height: 48,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Brand.border,
+  content: {
+    flexGrow: 1,
     paddingHorizontal: Spacing.four,
-    backgroundColor: Brand.canvas,
-    color: Brand.ink,
-    fontSize: 15,
+    paddingBottom: Spacing.six,
+    justifyContent: "center",
+    gap: Spacing.five,
   },
-  cta: {
-    marginTop: Spacing.four,
-  },
-  hint: {
+  footer: {
     textAlign: "center",
     fontSize: 12,
+    lineHeight: 17,
     color: Brand.muted,
-    marginTop: Spacing.two,
+    paddingHorizontal: Spacing.four,
   },
 });
