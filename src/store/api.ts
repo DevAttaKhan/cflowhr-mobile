@@ -7,6 +7,7 @@ export const apiSlice = createApi({
     "MeAttendance",
     "LeaveRequests",
     "LeaveTypes",
+    "LeaveBalances",
     "AttendanceRequests",
   ],
   endpoints: () => ({}),

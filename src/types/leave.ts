@@ -33,3 +33,13 @@ export interface LeaveRequestsQuery {
   status?: LeaveStatus;
   employeeId?: number;
 }
+
+export interface LeaveBalance {
+  leaveTypeId: number;
+  leaveTypeName: string;
+  leaveTypeCode: string;
+  allocated: number;
+  used: number;
+  pending: number;
+  remaining: number;
+}

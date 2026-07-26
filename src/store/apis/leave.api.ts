@@ -1,10 +1,12 @@
 import {
   delay,
+  mockLeaveBalances,
   mockLeaveRequests,
   mockLeaveTypes,
 } from "@/data/mocks/employee";
 import type {
   CreateLeaveRequestPayload,
+  LeaveBalance,
   LeaveRequest,
   LeaveRequestsQuery,
   LeaveType,
@@ -19,6 +21,13 @@ export const leaveApi = apiSlice.injectEndpoints({
         return { data: mockLeaveTypes };
       },
       providesTags: [{ type: "LeaveTypes", id: "LIST" }],
+    }),
+    getMyLeaveBalances: builder.query<LeaveBalance[], void>({
+      async queryFn() {
+        await delay(180);
+        return { data: mockLeaveBalances };
+      },
+      providesTags: [{ type: "LeaveBalances", id: "LIST" }],
     }),
     getLeaveRequests: builder.query<LeaveRequest[], LeaveRequestsQuery | void>({
       async queryFn(query) {
@@ -52,7 +61,10 @@ export const leaveApi = apiSlice.injectEndpoints({
         mockLeaveRequests.unshift(created);
         return { data: created };
       },
-      invalidatesTags: [{ type: "LeaveRequests", id: "LIST" }],
+      invalidatesTags: [
+        { type: "LeaveRequests", id: "LIST" },
+        { type: "LeaveBalances", id: "LIST" },
+      ],
     }),
     cancelLeaveRequest: builder.mutation<LeaveRequest, number>({
       async queryFn(id) {
@@ -68,13 +80,17 @@ export const leaveApi = apiSlice.injectEndpoints({
         mockLeaveRequests[index] = updated;
         return { data: updated };
       },
-      invalidatesTags: [{ type: "LeaveRequests", id: "LIST" }],
+      invalidatesTags: [
+        { type: "LeaveRequests", id: "LIST" },
+        { type: "LeaveBalances", id: "LIST" },
+      ],
     }),
   }),
 });
 
 export const {
   useGetLeaveTypesQuery,
+  useGetMyLeaveBalancesQuery,
   useGetLeaveRequestsQuery,
   useCreateLeaveRequestMutation,
   useCancelLeaveRequestMutation,

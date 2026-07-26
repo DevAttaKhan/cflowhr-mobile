@@ -17,7 +17,7 @@ import type {
 } from "@/types/attendance";
 import type { AttendanceRequest } from "@/types/attendance-request";
 import type { AuthUser } from "@/types/auth";
-import type { LeaveRequest, LeaveType } from "@/types/leave";
+import type { LeaveBalance, LeaveRequest, LeaveType } from "@/types/leave";
 
 export const MOCK_USER: AuthUser = {
   id: 10,
@@ -202,6 +202,36 @@ export const mockLeaveTypes: LeaveType[] = [
   { id: 1, name: "Annual Leave", code: "ANNUAL", isPaid: true },
   { id: 2, name: "Sick Leave", code: "SICK", isPaid: true },
   { id: 3, name: "Casual Leave", code: "CASUAL", isPaid: true },
+];
+
+export const mockLeaveBalances: LeaveBalance[] = [
+  {
+    leaveTypeId: 1,
+    leaveTypeName: "Annual",
+    leaveTypeCode: "ANNUAL",
+    allocated: 18,
+    used: 6,
+    pending: 3,
+    remaining: 9,
+  },
+  {
+    leaveTypeId: 2,
+    leaveTypeName: "Sick",
+    leaveTypeCode: "SICK",
+    allocated: 10,
+    used: 1,
+    pending: 0,
+    remaining: 9,
+  },
+  {
+    leaveTypeId: 3,
+    leaveTypeName: "Casual",
+    leaveTypeCode: "CASUAL",
+    allocated: 6,
+    used: 0.5,
+    pending: 0,
+    remaining: 5.5,
+  },
 ];
 
 export let mockLeaveRequests: LeaveRequest[] = [
