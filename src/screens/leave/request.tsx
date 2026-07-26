@@ -1,7 +1,10 @@
-import { format } from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +14,7 @@ import {
 } from "react-native";
 
 import { AppButton } from "@/components/ui/app-button";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Brand, Radii, Spacing } from "@/constants/theme";
 import {
   useCreateLeaveRequestMutation,
@@ -18,157 +22,256 @@ import {
   useGetMyLeaveBalancesQuery,
 } from "@/store/apis/leave.api";
 
+import { LeaveTypePicker } from "./leave-type-picker";
+import {
+  clampEndDate,
+  computeLeaveDays,
+  hasLeaveFormErrors,
+  toDateKey,
+  validateLeaveRequest,
+  type LeaveRequestFormErrors,
+} from "./validate-leave-request";
+
 export const LeaveRequestScreen = () => {
   const { data: types = [] } = useGetLeaveTypesQuery();
   const { data: balances = [] } = useGetMyLeaveBalancesQuery();
   const [create, { isLoading }] = useCreateLeaveRequestMutation();
-  const [leaveTypeId, setLeaveTypeId] = useState(types[0]?.id ?? 1);
-  const [startDate, setStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
+  const [leaveTypeId, setLeaveTypeId] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState(() => startOfDay(new Date()));
+  const [endDate, setEndDate] = useState(() => startOfDay(new Date()));
   const [reason, setReason] = useState("");
   const [halfDay, setHalfDay] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (leaveTypeId == null && types[0]) {
+      setLeaveTypeId(types[0].id);
+    }
+  }, [leaveTypeId, types]);
 
   const selectedBalance = balances.find(
     (row) => row.leaveTypeId === leaveTypeId,
   );
 
-  const handleSubmit = async () => {
-    if (!reason.trim()) {
-      return;
-    }
-    await create({
+  const values = useMemo(
+    () => ({
       leaveTypeId,
       startDate,
       endDate,
       halfDay,
-      reason: reason.trim(),
-    }).unwrap();
-    router.back();
+      reason,
+    }),
+    [endDate, halfDay, leaveTypeId, reason, startDate],
+  );
+
+  const errors: LeaveRequestFormErrors = useMemo(
+    () => validateLeaveRequest(values, selectedBalance),
+    [selectedBalance, values],
+  );
+
+  const showErrors = touched;
+  const days = computeLeaveDays(startDate, endDate, halfDay);
+
+  const handleStartChange = (date: Date) => {
+    const nextStart = startOfDay(date);
+    setStartDate(nextStart);
+    setEndDate((current) =>
+      halfDay ? nextStart : clampEndDate(nextStart, current),
+    );
+  };
+
+  const handleEndChange = (date: Date) => {
+    const nextEnd = startOfDay(date);
+    setEndDate(clampEndDate(startDate, nextEnd));
+    if (halfDay && toDateKey(nextEnd) !== toDateKey(startDate)) {
+      setHalfDay(false);
+    }
+  };
+
+  const handleHalfDayToggle = () => {
+    setHalfDay((current) => {
+      const next = !current;
+      if (next) {
+        setEndDate(startDate);
+      }
+      return next;
+    });
+  };
+
+  const handleSubmit = async () => {
+    setTouched(true);
+    setSubmitError(null);
+    const nextErrors = validateLeaveRequest(values, selectedBalance);
+    if (hasLeaveFormErrors(nextErrors)) {
+      return;
+    }
+    if (!leaveTypeId) {
+      return;
+    }
+
+    try {
+      await create({
+        leaveTypeId,
+        startDate: toDateKey(startDate),
+        endDate: toDateKey(endDate),
+        halfDay,
+        reason: reason.trim(),
+      }).unwrap();
+      router.back();
+    } catch {
+      setSubmitError("Couldn’t submit your request. Try again.");
+      Alert.alert("Request failed", "Please try again in a moment.");
+    }
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={styles.hero}>
-        <Text style={styles.title}>Request leave</Text>
-        <Text style={styles.subtitle}>Your approver will be notified.</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>Leave type</Text>
-        <View style={styles.types}>
-          {types.map((type) => {
-            const active = leaveTypeId === type.id;
-            const balance = balances.find((row) => row.leaveTypeId === type.id);
-            return (
-              <Pressable
-                key={type.id}
-                onPress={() => setLeaveTypeId(type.id)}
-                style={[styles.typeChip, active && styles.typeChipActive]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-              >
-                <Text
-                  style={[styles.typeText, active && styles.typeTextActive]}
-                >
-                  {type.name.replace(" Leave", "")}
-                </Text>
-                {balance ? (
-                  <Text
-                    style={[
-                      styles.typeBalance,
-                      active && styles.typeBalanceActive,
-                    ]}
-                  >
-                    {balance.remaining} left
-                  </Text>
-                ) : null}
-              </Pressable>
-            );
-          })}
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.hero}>
+          <Text style={styles.title}>Request leave</Text>
+          <Text style={styles.subtitle}>
+            Pick dates and share a short reason for your approver.
+          </Text>
         </View>
 
-        {selectedBalance ? (
-          <Text style={styles.balanceHint}>
-            {selectedBalance.remaining} of {selectedBalance.allocated} days
-            remaining
-            {selectedBalance.pending > 0
-              ? ` · ${selectedBalance.pending} pending`
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Duration</Text>
+          <Text style={styles.summaryValue}>
+            {halfDay ? "0.5" : days}
+            <Text style={styles.summaryUnit}>
+              {" "}
+              day{days === 1 && !halfDay ? "" : "s"}
+            </Text>
+          </Text>
+          <Text style={styles.summaryRange}>
+            {format(startDate, "MMM d")}
+            {toDateKey(startDate) !== toDateKey(endDate)
+              ? ` – ${format(endDate, "MMM d")}`
+              : ""}
+            {selectedBalance
+              ? ` · ${selectedBalance.remaining} remaining`
               : ""}
           </Text>
-        ) : null}
-      </View>
+          {showErrors && errors.days ? (
+            <Text style={styles.error}>{errors.days}</Text>
+          ) : null}
+        </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Start date</Text>
-        <TextInput
-          value={startDate}
-          onChangeText={setStartDate}
-          style={styles.input}
-          autoCapitalize="none"
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={Brand.muted}
-          accessibilityLabel="Start date"
-        />
+        <View style={styles.card}>
+          <LeaveTypePicker
+            types={types}
+            balances={balances}
+            value={leaveTypeId}
+            onChange={setLeaveTypeId}
+            error={showErrors ? errors.leaveTypeId : undefined}
+          />
+          {selectedBalance ? (
+            <Text style={styles.balanceHint}>
+              {selectedBalance.remaining} of {selectedBalance.allocated} days
+              left
+              {selectedBalance.pending > 0
+                ? ` · ${selectedBalance.pending} pending`
+                : ""}
+            </Text>
+          ) : null}
+        </View>
 
-        <Text style={[styles.label, styles.labelSpaced]}>End date</Text>
-        <TextInput
-          value={endDate}
-          onChangeText={setEndDate}
-          style={styles.input}
-          autoCapitalize="none"
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={Brand.muted}
-          accessibilityLabel="End date"
-        />
+        <View style={styles.card}>
+          <DatePickerField
+            label="Start date"
+            value={startDate}
+            onChange={handleStartChange}
+            minimumDate={startOfDay(new Date())}
+            error={showErrors ? errors.startDate : undefined}
+          />
 
-        <Pressable
-          onPress={() => setHalfDay((value) => !value)}
-          style={styles.toggleRow}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: halfDay }}
-        >
-          <View style={[styles.checkbox, halfDay && styles.checkboxOn]}>
-            {halfDay ? <Text style={styles.checkMark}>✓</Text> : null}
+          <View style={styles.fieldGap} />
+
+          <DatePickerField
+            label="End date"
+            value={endDate}
+            onChange={handleEndChange}
+            minimumDate={startDate}
+            error={showErrors ? errors.endDate : undefined}
+            disabled={halfDay}
+          />
+
+          <Pressable
+            onPress={handleHalfDayToggle}
+            style={styles.toggleRow}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: halfDay }}
+          >
+            <View style={[styles.checkbox, halfDay && styles.checkboxOn]}>
+              {halfDay ? <Text style={styles.checkMark}>✓</Text> : null}
+            </View>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleLabel}>Half day</Text>
+              <Text style={styles.toggleHint}>
+                Uses a single date and counts as 0.5 day
+              </Text>
+            </View>
+          </Pressable>
+          {showErrors && errors.halfDay ? (
+            <Text style={styles.error}>{errors.halfDay}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.reasonHeader}>
+            <Text style={styles.label}>Reason</Text>
+            <Text style={styles.counter}>{reason.trim().length}/280</Text>
           </View>
-          <View style={styles.toggleCopy}>
-            <Text style={styles.toggleLabel}>Half day</Text>
-            <Text style={styles.toggleHint}>Counts as 0.5 day</Text>
-          </View>
-        </Pressable>
-      </View>
+          <TextInput
+            value={reason}
+            onChangeText={setReason}
+            style={[
+              styles.input,
+              styles.textarea,
+              showErrors && errors.reason ? styles.inputError : null,
+            ]}
+            multiline
+            maxLength={280}
+            placeholder="Why do you need time off?"
+            placeholderTextColor={Brand.muted}
+            accessibilityLabel="Reason"
+          />
+          {showErrors && errors.reason ? (
+            <Text style={styles.error}>{errors.reason}</Text>
+          ) : null}
+        </View>
 
-      <View style={styles.card}>
-        <Text style={styles.label}>Reason</Text>
-        <TextInput
-          value={reason}
-          onChangeText={setReason}
-          style={[styles.input, styles.textarea]}
-          multiline
-          placeholder="Why do you need time off?"
-          placeholderTextColor={Brand.muted}
-          accessibilityLabel="Reason"
+        {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
+
+        <AppButton
+          label={isLoading ? "Submitting…" : "Submit request"}
+          disabled={isLoading}
+          onPress={() => void handleSubmit()}
         />
-      </View>
-
-      <AppButton
-        label={isLoading ? "Submitting…" : "Submit request"}
-        disabled={isLoading || !reason.trim()}
-        onPress={() => void handleSubmit()}
-      />
-      <AppButton
-        label="Cancel"
-        variant="ghost"
-        onPress={() => router.back()}
-      />
-    </ScrollView>
+        <AppButton
+          label="Cancel"
+          variant="ghost"
+          onPress={() => router.back()}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   screen: {
     flex: 1,
     backgroundColor: Brand.canvas,
@@ -179,7 +282,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.seven,
   },
   hero: {
-    gap: 2,
+    gap: 4,
   },
   title: {
     fontSize: 22,
@@ -191,6 +294,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Brand.muted,
     fontWeight: "500",
+    lineHeight: 18,
+  },
+  summaryCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Spacing.five,
+    gap: 4,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Brand.muted,
+  },
+  summaryValue: {
+    fontSize: 36,
+    fontWeight: "700",
+    color: Brand.ink,
+    letterSpacing: -1,
+  },
+  summaryUnit: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: Brand.muted,
+  },
+  summaryRange: {
+    fontSize: 13,
+    color: Brand.inkSoft,
+    fontWeight: "500",
   },
   card: {
     backgroundColor: Brand.surface,
@@ -200,56 +333,30 @@ const styles = StyleSheet.create({
     padding: Spacing.five,
     gap: Spacing.two,
   },
-  label: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Brand.inkSoft,
-    marginBottom: Spacing.one,
-  },
-  labelSpaced: {
-    marginTop: Spacing.three,
-  },
-  types: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.two,
-  },
-  typeChip: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
-    borderRadius: Radii.md,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.canvas,
-    minWidth: "30%",
-    flexGrow: 1,
-  },
-  typeChipActive: {
-    backgroundColor: Brand.primaryMuted,
-    borderColor: Brand.primary,
-  },
-  typeText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Brand.inkSoft,
-  },
-  typeTextActive: {
-    color: Brand.ink,
-  },
-  typeBalance: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Brand.muted,
-    marginTop: 2,
-  },
-  typeBalanceActive: {
-    color: Brand.inkSoft,
-  },
   balanceHint: {
     fontSize: 12,
     color: Brand.muted,
     fontWeight: "500",
-    marginTop: Spacing.two,
+    marginTop: Spacing.one,
+  },
+  fieldGap: {
+    height: Spacing.three,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Brand.inkSoft,
+  },
+  reasonHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.one,
+  },
+  counter: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Brand.muted,
   },
   input: {
     minHeight: 48,
@@ -261,8 +368,11 @@ const styles = StyleSheet.create({
     color: Brand.ink,
     fontSize: 15,
   },
+  inputError: {
+    borderColor: Brand.danger,
+  },
   textarea: {
-    minHeight: 110,
+    minHeight: 120,
     paddingTop: Spacing.three,
     textAlignVertical: "top",
   },
@@ -292,6 +402,7 @@ const styles = StyleSheet.create({
     color: Brand.ink,
   },
   toggleCopy: {
+    flex: 1,
     gap: 1,
   },
   toggleLabel: {
@@ -302,5 +413,11 @@ const styles = StyleSheet.create({
   toggleHint: {
     fontSize: 12,
     color: Brand.muted,
+  },
+  error: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Brand.danger,
+    marginTop: Spacing.one,
   },
 });
