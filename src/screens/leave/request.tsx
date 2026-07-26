@@ -15,16 +15,22 @@ import { Brand, Radii, Spacing } from "@/constants/theme";
 import {
   useCreateLeaveRequestMutation,
   useGetLeaveTypesQuery,
+  useGetMyLeaveBalancesQuery,
 } from "@/store/apis/leave.api";
 
 export const LeaveRequestScreen = () => {
   const { data: types = [] } = useGetLeaveTypesQuery();
+  const { data: balances = [] } = useGetMyLeaveBalancesQuery();
   const [create, { isLoading }] = useCreateLeaveRequestMutation();
-  const [leaveTypeId, setLeaveTypeId] = useState(1);
+  const [leaveTypeId, setLeaveTypeId] = useState(types[0]?.id ?? 1);
   const [startDate, setStartDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [reason, setReason] = useState("");
   const [halfDay, setHalfDay] = useState(false);
+
+  const selectedBalance = balances.find(
+    (row) => row.leaveTypeId === leaveTypeId,
+  );
 
   const handleSubmit = async () => {
     if (!reason.trim()) {
@@ -46,75 +52,112 @@ export const LeaveRequestScreen = () => {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.title}>Request leave</Text>
-      <Text style={styles.subtitle}>We’ll notify your approver.</Text>
-
-      <Text style={styles.label}>Leave type</Text>
-      <View style={styles.types}>
-        {types.map((type) => {
-          const active = leaveTypeId === type.id;
-          return (
-            <Pressable
-              key={type.id}
-              onPress={() => setLeaveTypeId(type.id)}
-              style={[styles.typeChip, active && styles.typeChipActive]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Text
-                style={[styles.typeText, active && styles.typeTextActive]}
-              >
-                {type.name}
-              </Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.hero}>
+        <Text style={styles.title}>Request leave</Text>
+        <Text style={styles.subtitle}>Your approver will be notified.</Text>
       </View>
 
-      <Text style={styles.label}>Start date (YYYY-MM-DD)</Text>
-      <TextInput
-        value={startDate}
-        onChangeText={setStartDate}
-        style={styles.input}
-        autoCapitalize="none"
-        accessibilityLabel="Start date"
-      />
+      <View style={styles.card}>
+        <Text style={styles.label}>Leave type</Text>
+        <View style={styles.types}>
+          {types.map((type) => {
+            const active = leaveTypeId === type.id;
+            const balance = balances.find((row) => row.leaveTypeId === type.id);
+            return (
+              <Pressable
+                key={type.id}
+                onPress={() => setLeaveTypeId(type.id)}
+                style={[styles.typeChip, active && styles.typeChipActive]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Text
+                  style={[styles.typeText, active && styles.typeTextActive]}
+                >
+                  {type.name.replace(" Leave", "")}
+                </Text>
+                {balance ? (
+                  <Text
+                    style={[
+                      styles.typeBalance,
+                      active && styles.typeBalanceActive,
+                    ]}
+                  >
+                    {balance.remaining} left
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
 
-      <Text style={styles.label}>End date (YYYY-MM-DD)</Text>
-      <TextInput
-        value={endDate}
-        onChangeText={setEndDate}
-        style={styles.input}
-        autoCapitalize="none"
-        accessibilityLabel="End date"
-      />
+        {selectedBalance ? (
+          <Text style={styles.balanceHint}>
+            {selectedBalance.remaining} of {selectedBalance.allocated} days
+            remaining
+            {selectedBalance.pending > 0
+              ? ` · ${selectedBalance.pending} pending`
+              : ""}
+          </Text>
+        ) : null}
+      </View>
 
-      <Pressable
-        onPress={() => setHalfDay((v) => !v)}
-        style={styles.toggleRow}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: halfDay }}
-      >
-        <View style={[styles.checkbox, halfDay && styles.checkboxOn]} />
-        <Text style={styles.toggleLabel}>Half day</Text>
-      </Pressable>
+      <View style={styles.card}>
+        <Text style={styles.label}>Start date</Text>
+        <TextInput
+          value={startDate}
+          onChangeText={setStartDate}
+          style={styles.input}
+          autoCapitalize="none"
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={Brand.muted}
+          accessibilityLabel="Start date"
+        />
 
-      <Text style={styles.label}>Reason</Text>
-      <TextInput
-        value={reason}
-        onChangeText={setReason}
-        style={[styles.input, styles.textarea]}
-        multiline
-        placeholder="Why do you need time off?"
-        placeholderTextColor={Brand.muted}
-        accessibilityLabel="Reason"
-      />
+        <Text style={[styles.label, styles.labelSpaced]}>End date</Text>
+        <TextInput
+          value={endDate}
+          onChangeText={setEndDate}
+          style={styles.input}
+          autoCapitalize="none"
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={Brand.muted}
+          accessibilityLabel="End date"
+        />
+
+        <Pressable
+          onPress={() => setHalfDay((value) => !value)}
+          style={styles.toggleRow}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: halfDay }}
+        >
+          <View style={[styles.checkbox, halfDay && styles.checkboxOn]}>
+            {halfDay ? <Text style={styles.checkMark}>✓</Text> : null}
+          </View>
+          <View style={styles.toggleCopy}>
+            <Text style={styles.toggleLabel}>Half day</Text>
+            <Text style={styles.toggleHint}>Counts as 0.5 day</Text>
+          </View>
+        </Pressable>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.label}>Reason</Text>
+        <TextInput
+          value={reason}
+          onChangeText={setReason}
+          style={[styles.input, styles.textarea]}
+          multiline
+          placeholder="Why do you need time off?"
+          placeholderTextColor={Brand.muted}
+          accessibilityLabel="Reason"
+        />
+      </View>
 
       <AppButton
         label={isLoading ? "Submitting…" : "Submit request"}
         disabled={isLoading || !reason.trim()}
         onPress={() => void handleSubmit()}
-        style={styles.submit}
       />
       <AppButton
         label="Cancel"
@@ -131,24 +174,39 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.canvas,
   },
   content: {
-    padding: Spacing.five,
-    gap: Spacing.two,
+    padding: Spacing.four,
+    gap: Spacing.four,
     paddingBottom: Spacing.seven,
   },
+  hero: {
+    gap: 2,
+  },
   title: {
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "700",
     color: Brand.ink,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: Brand.muted,
-    marginBottom: Spacing.three,
+    fontWeight: "500",
+  },
+  card: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radii.xl,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Spacing.five,
+    gap: Spacing.two,
   },
   label: {
     fontSize: 12,
     fontWeight: "700",
     color: Brand.inkSoft,
+    marginBottom: Spacing.one,
+  },
+  labelSpaced: {
     marginTop: Spacing.three,
   },
   types: {
@@ -158,23 +216,40 @@ const styles = StyleSheet.create({
   },
   typeChip: {
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Radii.full,
+    paddingVertical: Spacing.three,
+    borderRadius: Radii.md,
     borderWidth: 1,
     borderColor: Brand.border,
-    backgroundColor: Brand.surface,
+    backgroundColor: Brand.canvas,
+    minWidth: "30%",
+    flexGrow: 1,
   },
   typeChipActive: {
-    backgroundColor: Brand.secondaryMuted,
-    borderColor: Brand.secondary,
+    backgroundColor: Brand.primaryMuted,
+    borderColor: Brand.primary,
   },
   typeText: {
     fontSize: 13,
-    fontWeight: "600",
-    color: Brand.muted,
+    fontWeight: "700",
+    color: Brand.inkSoft,
   },
   typeTextActive: {
     color: Brand.ink,
+  },
+  typeBalance: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Brand.muted,
+    marginTop: 2,
+  },
+  typeBalanceActive: {
+    color: Brand.inkSoft,
+  },
+  balanceHint: {
+    fontSize: 12,
+    color: Brand.muted,
+    fontWeight: "500",
+    marginTop: Spacing.two,
   },
   input: {
     minHeight: 48,
@@ -182,7 +257,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Brand.border,
     paddingHorizontal: Spacing.four,
-    backgroundColor: Brand.surface,
+    backgroundColor: Brand.canvas,
     color: Brand.ink,
     fontSize: 15,
   },
@@ -195,7 +270,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.three,
-    marginTop: Spacing.three,
+    marginTop: Spacing.four,
   },
   checkbox: {
     width: 22,
@@ -204,17 +279,28 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Brand.border,
     backgroundColor: Brand.surface,
+    alignItems: "center",
+    justifyContent: "center",
   },
   checkboxOn: {
     backgroundColor: Brand.primary,
     borderColor: Brand.primary,
+  },
+  checkMark: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Brand.ink,
+  },
+  toggleCopy: {
+    gap: 1,
   },
   toggleLabel: {
     fontSize: 14,
     fontWeight: "600",
     color: Brand.ink,
   },
-  submit: {
-    marginTop: Spacing.five,
+  toggleHint: {
+    fontSize: 12,
+    color: Brand.muted,
   },
 });

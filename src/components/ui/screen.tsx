@@ -32,5 +32,6 @@ const styles = StyleSheet.create({
   inner: {
     flex: 1,
     paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.five,
   },
 });

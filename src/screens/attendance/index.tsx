@@ -15,7 +15,7 @@ import { useGetMyLeaveBalancesQuery } from "@/store/apis/leave.api";
 import { AttendanceHeader } from "./attendance-header";
 import { useMonthKey } from "./compute-highlights";
 import { DayDetailsList } from "./day-details-list";
-import { LeaveBalanceCard } from "./leave-balance-card";
+import { LeaveBalanceCard } from "@/components/leave/leave-balance-card";
 import { MonthSummaryCard } from "./month-summary-card";
 
 export const AttendanceScreen = () => {
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.two,
+    paddingTop: Spacing.three,
     paddingBottom: Spacing.seven,
     gap: Spacing.four,
   },
